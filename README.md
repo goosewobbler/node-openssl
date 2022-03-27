@@ -13,16 +13,23 @@ const openssl = new NodeOpenSSL();
 
 (async () => {
   try {
-    // creating private key separately
+    // creating private key
     const { key, cmd } = await openssl.generatePrivateKey(RSAKeyOptions);
     csrOpts.key = key;
 
-    // creates private key using options when key is not specified - not sure about this
-    const csr = await openssl.generateCSR(csrOpts); // key specified
-    const caCSR = await openssl.generateCSR(caOpts, RSAKeyOptions); // key not specified
+    // create CSR from key - should also generate pkey if not specified
+    const csr = await openssl.generateCSR(csrOpts);
+    const { key } = csr;
+    // openssl req -config cnf/ssl.cnf -new -out csr/{acme.domain}-csr.pem
 
-    const ca = await caCSR.selfSign(); //selfSign function on returned CSR obj
+    // create self-signed root CA - should also generate pkey if not specified
+    const ca = await openssl.generateRootCA(caOpts);
+    const { crt, key, cmd } = ca;
+    // openssl req -config cnf/ca.cnf -x509 -new -days 1095 -out ca/rootCA-crt.pem
+
+    // sign CSR with root CA
     const { crt, key, csr, cmd } = await ca.signCSR(csr);
+    // openssl x509 -req -in csr/{acme.domain}-csr.pem -CA ca/rootCA-crt.pem -CAkey ca/rootCA-key.pem -CAcreateserial -out {acme.domain}-crt.pem -days 365 -sha512 -extfile cnf/ssl.cnf -extensions v3_req
 
     console.log(cmd);
     console.log(crt);
