@@ -10,7 +10,7 @@ Initial use case - generation of self-signed certificates.
 
 _Why?_
 
-`node-openssl-cert` covers a wide spectrum of openssl functionality but has some serious limitations. A similar approach was taken but utilising a cleaner promise-based interface.
+`node-openssl-cert` covers a wide spectrum of openssl functionality but has some serious limitations. A similar approach was taken but utilising a more light-weight and cleaner promise-based interface.
 
 _Does it do everything that `node-openssl-cert` does?_
 
