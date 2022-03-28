@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { generateConfig } from './config';
 
 type PrivateKeyResult = {
   key: string;
@@ -22,7 +23,9 @@ type GenerateCSRParams = {
   keySize?: number;
   messageDigest?: string;
   outputFile?: string;
-  distinguishedName?: string;
+  distinguishedName?: {
+    [key: string]: string;
+  };
   subjectAltName?: string;
 };
 
@@ -203,8 +206,8 @@ export class NodeOpenSSL {
   }: GenerateCSRParams = {}): Promise<CSRResult> {
     let cmdBits = [`openssl req -new -noenc -out ${outputFile}`];
 
-    //TODO: generate conf file
-
+    const configFile = generateConfig({ distinguishedName });
+    //TODO: write config file
     if (configFile) {
       cmdBits.push(`-config ${configFile}`);
     }
