@@ -5,7 +5,7 @@ type PrivateKeyResult = {
   cmd: string;
 };
 
-type PrivateKeyParams = {
+type GeneratePrivateKeyParams = {
   format?: string;
   algorithm?: string;
   encrypted?: boolean;
@@ -17,6 +17,21 @@ type PrivateKeyParams = {
   pkeyOpts?: { [Key: string]: string | number };
 };
 
+type GenerateCSRParams = {
+  keyFile?: string;
+  keySize?: number;
+  messageDigest?: string;
+  outputFile?: string;
+  distinguishedName?: string;
+  subjectAltName?: string;
+};
+
+type CSRResult = {
+  key: string;
+  csr: string;
+  cmd: string;
+};
+
 type CommandResult = {
   command: string;
   stdOut: string;
@@ -24,6 +39,7 @@ type CommandResult = {
   exitCode: number;
 };
 
+// TODO: verify usage / requirement and clean up or remove
 function normalizeCommand(command: string) {
   let cmd = command.split(' ');
   let outcmd = [];
@@ -47,6 +63,10 @@ export class NodeOpenSSL {
   private openSSLPath;
   private supportedCiphers?: string[];
   public commandLog: CommandResult[] = [];
+
+  constructor(openSSLPath = 'openssl') {
+    this.openSSLPath = openSSLPath;
+  }
 
   private async runCommand({ cmd, stdIn }: { cmd: string; stdIn?: string }): Promise<CommandResult> {
     const stdOutBuffer: Uint8Array[] = [];
@@ -112,10 +132,6 @@ export class NodeOpenSSL {
     });
   }
 
-  constructor(openSSLPath = 'openssl') {
-    this.openSSLPath = openSSLPath;
-  }
-
   public async getSupportedCiphers(): Promise<string[]> {
     const result = await this.runCommand({ cmd: 'enc -list' });
     const ciphers = result.stdOut.match(
@@ -134,37 +150,36 @@ export class NodeOpenSSL {
     encryptOpts = { cipher: 'des3', password: 'test123' },
     paramFile,
     pkeyOpts = {},
-    format = 'PKCS8',
-  }: PrivateKeyParams = {}): Promise<PrivateKeyResult> {
-    const validFormats = ['PKCS8', 'PKCS1'];
+  }: GeneratePrivateKeyParams = {}): Promise<PrivateKeyResult> {
     const validAlgorithms = ['RSA', 'RSA-PSS', 'EC', 'X25519', 'X448', 'ED25519', 'ED448'];
-    const validCiphers = this.supportedCiphers ?? (await this.getSupportedCiphers());
-    const validOpenSSLPassphrase = /^(pass|env|file|fd):.*/;
 
-    if (!validFormats.includes(format)) {
-      throw new Error(`Invalid format: ${format}`);
-    }
-    if (!validAlgorithms.includes(algorithm)) {
-      throw new Error(`Invalid algorithm: ${algorithm}`);
-    }
-
-    let cmdBits = [`genpkey -outform PEM -algorithm ${algorithm}`];
+    let cmdBits = ['genpkey -outform PEM'];
     let stdIn;
 
     if (paramFile) {
       cmdBits.push(`-paramfile ${paramFile}`);
     } else {
+      // algorithm is mutually exclusive with paramfile
+      if (!validAlgorithms.includes(algorithm)) {
+        throw new Error(`Invalid algorithm: ${algorithm}`);
+      }
+      cmdBits.push(`-algorithm ${algorithm}`);
+
       Object.keys(pkeyOpts).forEach((key) => {
         cmdBits.push(`-pkeyopt ${key}:${pkeyOpts[key]}`);
       });
     }
 
     if (encrypted) {
+      const validCiphers = this.supportedCiphers ?? (await this.getSupportedCiphers());
+      const validOpenSSLPassphrase = /^(pass|env|file|fd):.*/;
       const { cipher, password } = encryptOpts;
       let passphrase = 'stdin';
+
       if (!validCiphers.includes(cipher)) {
         throw new Error(`Invalid cipher: ${cipher}`);
       }
+
       if (validOpenSSLPassphrase.test(password)) {
         passphrase = password;
       } else {
@@ -173,39 +188,37 @@ export class NodeOpenSSL {
       cmdBits.push(`-pass ${passphrase} -${cipher}`);
     }
 
-    const { command, stdOut } = await this.runCommand({ cmd: cmdBits.join(' '), stdIn });
+    const { command: cmd, stdOut: key } = await this.runCommand({ cmd: cmdBits.join(' '), stdIn });
 
-    return { key: stdOut, cmd: command };
-
-    // TODO: convert to PKCS1
-
-    // if(format=='PKCS8') {
-    // 	this.runCommand({ cmd, stdin: options.encryption.password}, function(err, out) {
-    // 		//console.log(err);
-    // 		if(err) {
-    // 			callback(err, false, false);
-    // 		} else {
-    // 			callback(false, out.stdout.toString(), [out.command + ' -out priv.key']);
-    // 		}
-    // 	});
-    // } else if (format == 'PKCS1' ) {
-    // 	this.runCommand({ cmd, stdin: options.encryption.password}, function(err, outkey) {
-    // 		if(err) {
-    // 			callback(err, false, false);
-    // 		} else {
-    // 			convertToPKCS1(outkey.stdout.toString(), options.encryption, function(err, out) {
-    // 				if(err) {
-    // 					callback(err, false, false);
-    // 				} else {
-    // 					callback(false, out.data, [ outkey.command + ' -out priv.key', out.command + ' -out priv.key' ]);
-    // 				}
-    // 			});
-    // 		}
-    // 	});
-    // }
+    return { key, cmd };
   }
 
-  // TODO: generateCSR()
-  // TODO: csr.selfSign()
-  // TODO: ca.signCSR()
+  public async generateCSR({
+    keyFile,
+    keySize = 4096,
+    messageDigest = 'sha512',
+    outputFile = 'csr.pem',
+    distinguishedName,
+    subjectAltName,
+  }: GenerateCSRParams = {}): Promise<CSRResult> {
+    let cmdBits = [`openssl req -new -noenc -out ${outputFile}`];
+
+    //TODO: generate conf file
+
+    if (configFile) {
+      cmdBits.push(`-config ${configFile}`);
+    }
+
+    const { command: cmd, stdOut: csr } = await this.runCommand({ cmd: cmdBits.join(' ') });
+
+    //TODO: read (created or supplied) keyFile
+
+    return { key, csr, cmd };
+  }
+
+  public async generateRootCA() {
+    return {
+      signCSR: () => {},
+    };
+  }
 }
