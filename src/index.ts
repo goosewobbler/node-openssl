@@ -248,7 +248,7 @@ export class NodeOpenSSL {
       altNames,
     }: GenerateCSRParams = { keyFile: `${cwd}/csr.key` },
   ): Promise<CSRResult> {
-    let cmdBits = [`req -new -noenc -out ${outputFile} -digest ${messageDigest}`];
+    let cmdBits = [`req -new -noenc -out ${outputFile}`];
 
     if (newKey) {
       // create new private key, output to keyFile
@@ -268,7 +268,7 @@ export class NodeOpenSSL {
     try {
       const tmpFile = await tmp.file({ mode: '0644', prefix: 'csr-', postfix: '.cnf' });
       configFilePath = tmpFile.path;
-      config = generateConfig({ distinguishedName, reqExtensions, altNames });
+      config = generateConfig({ messageDigest, distinguishedName, reqExtensions, altNames });
       await writeFile(configFilePath, config);
     } catch (e) {
       throw new Error(`Error writing config file: ${e}`);
@@ -278,7 +278,7 @@ export class NodeOpenSSL {
 
     const { command: cmd, stdOut: csr } = await this.runCommand({ cmd: cmdBits.join(' ') });
 
-    return { csr, cmd, config, files: { key: keyFile } };
+    return { csr, cmd, config, files: { key: keyFile, csr: outputFile } };
   }
 
   public async generateRootCA({
@@ -301,7 +301,7 @@ export class NodeOpenSSL {
     try {
       const tmpFile = await tmp.file({ mode: '0644', prefix: 'ca-', postfix: '.cnf' });
       configFilePath = tmpFile.path;
-      config = generateConfig({ distinguishedName, reqExtensions });
+      config = generateConfig({ messageDigest: 'sha512', distinguishedName, reqExtensions });
       await writeFile(configFilePath, config);
     } catch (e) {
       throw new Error(`Error writing config file: ${e}`);
@@ -309,24 +309,16 @@ export class NodeOpenSSL {
 
     cmdBits.push(`-config ${configFilePath}`);
 
-    const { command: cmd, stdOut: caCrt } = await this.runCommand({ cmd: cmdBits.join(' ') });
+    const { command: cmd } = await this.runCommand({ cmd: cmdBits.join(' ') });
+    const caCrtFile = outputFile;
 
     return {
       cmd,
-      ca: caCrt,
+      ca: outputFile,
       config,
       files: {},
       signCSR: async ({ csrFile, outputFile }: Partial<SignCSRParams>): Promise<SignedCertResult> => {
-        let crtFile;
-
-        try {
-          const tmpFile = await tmp.file({ mode: '0644', prefix: 'ca-', postfix: '.crt' });
-          crtFile = tmpFile.path;
-          await writeFile(crtFile, caCrt);
-        } catch (e) {
-          throw new Error(`Error writing CA cert file: ${e}`);
-        }
-        return this.signCSR({ csrFile, caCrtFile: crtFile, caKeyFile: keyFile, outputFile } as SignCSRParams);
+        return this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile } as SignCSRParams);
       },
     };
   }
@@ -339,9 +331,7 @@ export class NodeOpenSSL {
     caKeyFile,
   }: SignCSRParams): Promise<SignedCertResult> {
     // openssl req -in csr/{acme.domain}-csr.pem -out {acme.domain}-crt.pem -CA ca/rootCA-crt.pem -CAkey ca/rootCA-key.pem -days 365 -copy_extensions copy
-    let cmdBits = [
-      `req -in ${csrFile} -days ${expiryDays} -CA ${caCrtFile} -CAkey ${caKeyFile} -CAcreateserial -copy_extensions copy`,
-    ];
+    let cmdBits = [`req -in ${csrFile} -days ${expiryDays} -CA ${caCrtFile} -CAkey ${caKeyFile} -copy_extensions copy`];
 
     const files = {
       csr: csrFile,

@@ -3,6 +3,7 @@ type ConfigBlockData = {
 };
 
 type ConfigParams = {
+  messageDigest: string;
   distinguishedName?: {
     [key: string]: string;
   };
@@ -27,19 +28,21 @@ function generateBlock(blockTitle: string, blockData: ConfigBlockData | undefine
   if (!blockData) {
     return '';
   }
-  const blockContents = Object.keys(blockData).map((key) => generateLine(key, blockData[key]));
+  const blockContents = Object.keys(blockData)
+    .map((key) => generateLine(key, blockData[key]))
+    .join('');
   return `[ ${blockTitle} ]\n${blockContents}\n`;
 }
 
-export const generateConfig = ({ distinguishedName, reqExtensions, altNames }: ConfigParams) => {
+export const generateConfig = ({ messageDigest, distinguishedName, reqExtensions, altNames }: ConfigParams) => {
   const generateBlockReference = (key: string, blockName: string, blockData: ConfigBlockData | undefined) =>
-    blockData ? { [key]: `@${blockName}` } : {};
+    blockData ? { [key]: `${blockName}` } : {};
   return `
     ${generateBlock('req', {
       prompt: 'no',
       default_bits: 4096, // configurable, default 4096 (cmd override -newkey rsa:4096, default 2048)
-      default_md: 'sha512', // configurable, default sha512, validate digest supported by dgst (cmd override -digest, default sha256)
-      default_keyfile: '{acme.domain}-key.pem', // configurable, ignored if not specified (cmd override -keyout)
+      default_md: messageDigest, // configurable, default sha512, validate digest supported by dgst (cmd override -digest, default sha256)
+      // default_keyfile: '{acme.domain}-key.pem', // configurable, ignored if not specified (cmd override -keyout)
       string_mask: 'utf8only',
       utf8: 'yes',
       ...generateBlockReference('distinguished_name', 'req_distinguished_name', distinguishedName),
