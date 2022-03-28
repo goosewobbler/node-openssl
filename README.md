@@ -36,7 +36,7 @@ const openssl = new NodeOpenSSL('/path/to/openssl_bin');
 
     // create CSR from key - should also generate pkey if not specified
     const csrOpts = {
-      subjectAltNames: {
+      subjectAltName: {
         'DNS.1': '{acme.domain}',
         'IP.1': '{192.168.x.x}',
         'IP.2': '0.0.0.0',
