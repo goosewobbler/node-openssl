@@ -5,7 +5,7 @@ const openssl = new NodeOpenSSL('/usr/local/opt/openssl@3/bin/openssl');
 
 async function generateSelfSignedCert() {
   const distinguishedName = {
-    C: 'UK',
+    C: 'XX',
     ST: 'Test State or Province',
     L: 'Test Locality',
     O: 'Organization Name',
@@ -36,7 +36,7 @@ async function generateSelfSignedCert() {
     outputFile: 'test-crt.pem',
     expiryDays: 1095,
   };
-  return await ca.signCSR({ ...caCsrOpts, csrFile: files.csr });
+  return ca.signCSR({ ...caCsrOpts, csrFile: files.csr });
 }
 
 it('should generate a valid certificate', async () => {

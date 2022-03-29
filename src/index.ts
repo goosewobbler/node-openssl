@@ -82,28 +82,29 @@ type CommandResult = {
 
 // TODO: verify usage / requirement and clean up or remove
 function normalizeCommand(command: string) {
-  let cmd = command.split(' ');
-  let outcmd = [];
-  let cmdbuffer = [];
+  const cmd = command.split(' ');
+  const outcmd = [];
+  const cmdbuffer = [];
   for (let i = 0; i <= cmd.length - 1; i++) {
     if (cmd[i].charAt(cmd[i].length - 1) == '\\') {
       cmdbuffer.push(cmd[i]);
-    } else {
-      if (cmdbuffer.length > 0) {
-        outcmd.push(cmdbuffer.join(' ') + ' ' + cmd[i]);
+    } else if (cmdbuffer.length > 0) {
+        outcmd.push(`${cmdbuffer.join(' ')  } ${  cmd[i]}`);
         cmdbuffer.length = 0;
       } else {
         outcmd.push(cmd[i]);
       }
-    }
   }
   return outcmd;
 }
 
 export class NodeOpenSSL {
   private openSSLPath;
+
   private supportedCiphers?: string[];
+
   public openSSLVersionInfo?: string;
+
   public commandLog: CommandResult[] = [];
 
   constructor(openSSLPath = 'openssl') {
@@ -199,7 +200,7 @@ export class NodeOpenSSL {
   }: GeneratePrivateKeyParams = {}): Promise<PrivateKeyResult> {
     const validAlgorithms = ['RSA', 'RSA-PSS', 'EC', 'X25519', 'X448', 'ED25519', 'ED448'];
 
-    let cmdBits = ['genpkey -outform PEM'];
+    const cmdBits = ['genpkey -outform PEM'];
     let stdIn;
 
     if (paramFile) {
@@ -249,7 +250,7 @@ export class NodeOpenSSL {
       altNames,
     }: GenerateCSRParams = { keyFile: `${cwd}/csr.key` },
   ): Promise<CSRResult> {
-    let cmdBits = [`req -new -noenc -out ${outputFile}`];
+    const cmdBits = [`req -new -noenc -out ${outputFile}`];
 
     if (newKey) {
       // create new private key, output to keyFile
@@ -294,7 +295,7 @@ export class NodeOpenSSL {
     keyFile,
     expiryDays,
   }: GenerateRootCAParams): Promise<CAResult> {
-    let cmdBits = [`req -x509 -new -noenc -out ${outputFile} -keyout ${keyFile} -days ${expiryDays}`];
+    const cmdBits = [`req -x509 -new -noenc -out ${outputFile} -keyout ${keyFile} -days ${expiryDays}`];
     // openssl req -config cnf/ca.cnf -x509 -new -days 1095 -out ca/rootCA-crt.pem
 
     const reqExtensions = {
@@ -329,9 +330,7 @@ export class NodeOpenSSL {
       ca: outputFile,
       config,
       files: {},
-      signCSR: async ({ csrFile, outputFile }: Partial<SignCSRParams>): Promise<SignedCertResult> => {
-        return this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile, configFile } as SignCSRParams);
-      },
+      signCSR: async ({ csrFile, outputFile }: Partial<SignCSRParams>): Promise<SignedCertResult> => this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile, configFile } as SignCSRParams),
     };
   }
 
@@ -344,7 +343,7 @@ export class NodeOpenSSL {
     configFile,
   }: SignCSRParams): Promise<SignedCertResult> {
     // openssl req -in csr/{acme.domain}-csr.pem -out {acme.domain}-crt.pem -CA ca/rootCA-crt.pem -CAkey ca/rootCA-key.pem -days 365 -copy_extensions copy
-    let cmdBits = [
+    const cmdBits = [
       `req -in ${csrFile} -days ${expiryDays} -CA ${caCrtFile} -CAkey ${caKeyFile} -config ${configFile} -copy_extensions copy`,
     ];
 
