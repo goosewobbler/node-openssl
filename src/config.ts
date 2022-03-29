@@ -4,6 +4,7 @@ type ConfigBlockData = {
 
 type ConfigParams = {
   messageDigest: string;
+  reqExtensionBlockName: string;
   distinguishedName?: {
     [key: string]: string;
   };
@@ -34,7 +35,13 @@ function generateBlock(blockTitle: string, blockData: ConfigBlockData | undefine
   return `[ ${blockTitle} ]\n${blockContents}\n`;
 }
 
-export const generateConfig = ({ messageDigest, distinguishedName, reqExtensions, altNames }: ConfigParams) => {
+export const generateConfig = ({
+  messageDigest,
+  distinguishedName,
+  reqExtensionBlockName,
+  reqExtensions,
+  altNames,
+}: ConfigParams) => {
   const generateBlockReference = (key: string, blockName: string, blockData: ConfigBlockData | undefined) =>
     blockData ? { [key]: `${blockName}` } : {};
   return `
@@ -46,12 +53,12 @@ export const generateConfig = ({ messageDigest, distinguishedName, reqExtensions
       string_mask: 'utf8only',
       utf8: 'yes',
       ...generateBlockReference('distinguished_name', 'req_distinguished_name', distinguishedName),
-      ...generateBlockReference('req_extensions', 'v3_req', reqExtensions),
+      ...generateBlockReference('req_extensions', reqExtensionBlockName, reqExtensions),
     })}
     ${generateBlock('req_distinguished_name', distinguishedName)}
-    ${generateBlock('v3_req', {
+    ${generateBlock(reqExtensionBlockName, {
       ...reqExtensions,
-      ...generateBlockReference('subjectAltName', 'v3_req', altNames),
+      ...generateBlockReference('subjectAltName', reqExtensionBlockName, altNames),
     })}
     ${generateBlock('alt_names', altNames)}
   `;

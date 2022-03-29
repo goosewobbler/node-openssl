@@ -48,6 +48,7 @@ type SignCSRParams = {
   csrFile: string;
   caCrtFile: string;
   caKeyFile: string;
+  configFile: string;
   expiryDays?: number;
 };
 
@@ -268,7 +269,13 @@ export class NodeOpenSSL {
     try {
       const tmpFile = await tmp.file({ mode: '0644', prefix: 'csr-', postfix: '.cnf' });
       configFilePath = tmpFile.path;
-      config = generateConfig({ messageDigest, distinguishedName, reqExtensions, altNames });
+      config = generateConfig({
+        messageDigest,
+        distinguishedName,
+        reqExtensionBlockName: 'v3_req',
+        reqExtensions,
+        altNames,
+      });
       await writeFile(configFilePath, config);
     } catch (e) {
       throw new Error(`Error writing config file: ${e}`);
@@ -296,18 +303,23 @@ export class NodeOpenSSL {
       authorityKeyIdentifier: 'keyid:always,issuer',
     };
 
-    let configFilePath;
-    let config;
+    let configFile: string;
+    let config: string;
     try {
       const tmpFile = await tmp.file({ mode: '0644', prefix: 'ca-', postfix: '.cnf' });
-      configFilePath = tmpFile.path;
-      config = generateConfig({ messageDigest: 'sha512', distinguishedName, reqExtensions });
-      await writeFile(configFilePath, config);
+      configFile = tmpFile.path;
+      config = generateConfig({
+        messageDigest: 'sha512',
+        distinguishedName,
+        reqExtensionBlockName: 'v3_ca',
+        reqExtensions,
+      });
+      await writeFile(configFile, config);
     } catch (e) {
       throw new Error(`Error writing config file: ${e}`);
     }
 
-    cmdBits.push(`-config ${configFilePath}`);
+    cmdBits.push(`-config ${configFile}`);
 
     const { command: cmd } = await this.runCommand({ cmd: cmdBits.join(' ') });
     const caCrtFile = outputFile;
@@ -318,7 +330,7 @@ export class NodeOpenSSL {
       config,
       files: {},
       signCSR: async ({ csrFile, outputFile }: Partial<SignCSRParams>): Promise<SignedCertResult> => {
-        return this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile } as SignCSRParams);
+        return this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile, configFile } as SignCSRParams);
       },
     };
   }
@@ -329,9 +341,12 @@ export class NodeOpenSSL {
     csrFile,
     caCrtFile,
     caKeyFile,
+    configFile,
   }: SignCSRParams): Promise<SignedCertResult> {
     // openssl req -in csr/{acme.domain}-csr.pem -out {acme.domain}-crt.pem -CA ca/rootCA-crt.pem -CAkey ca/rootCA-key.pem -days 365 -copy_extensions copy
-    let cmdBits = [`req -in ${csrFile} -days ${expiryDays} -CA ${caCrtFile} -CAkey ${caKeyFile} -copy_extensions copy`];
+    let cmdBits = [
+      `req -in ${csrFile} -days ${expiryDays} -CA ${caCrtFile} -CAkey ${caKeyFile} -config ${configFile} -copy_extensions copy`,
+    ];
 
     const files = {
       csr: csrFile,
