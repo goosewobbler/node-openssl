@@ -86,14 +86,14 @@ function normalizeCommand(command: string) {
   const outcmd = [];
   const cmdbuffer = [];
   for (let i = 0; i <= cmd.length - 1; i++) {
-    if (cmd[i].charAt(cmd[i].length - 1) == '\\') {
+    if (cmd[i].charAt(cmd[i].length - 1) === '\\') {
       cmdbuffer.push(cmd[i]);
     } else if (cmdbuffer.length > 0) {
-        outcmd.push(`${cmdbuffer.join(' ')  } ${  cmd[i]}`);
-        cmdbuffer.length = 0;
-      } else {
-        outcmd.push(cmd[i]);
-      }
+      outcmd.push(`${cmdbuffer.join(' ')} ${cmd[i]}`);
+      cmdbuffer.length = 0;
+    } else {
+      outcmd.push(cmd[i]);
+    }
   }
   return outcmd;
 }
@@ -103,16 +103,29 @@ export class NodeOpenSSL {
 
   private supportedCiphers?: string[];
 
-  public openSSLVersionInfo?: string;
+  private openSSLVersionInfo?: string;
 
   public commandLog: CommandResult[] = [];
 
   constructor(openSSLPath = 'openssl') {
     this.openSSLPath = openSSLPath;
-    (async () => {
+  }
+
+  public async getOpenSSLVersion(): Promise<string | undefined> {
+    const parseVersionInfo = (): string | undefined => {
+      const versionStringMatches = (this.openSSLVersionInfo as string).match(/OpenSSL\s([0-9]\.[0-9]\.[0-9][a-z])/);
+      if (versionStringMatches && versionStringMatches.length) {
+        return versionStringMatches[0].replace('OpenSSL ', '');
+      }
+      return undefined;
+    };
+
+    if (!this.openSSLVersionInfo) {
       const { stdOut } = await this.runCommand({ cmd: 'version -a' });
       this.openSSLVersionInfo = stdOut;
-    })();
+    }
+
+    return Promise.resolve(parseVersionInfo());
   }
 
   private async runCommand({ cmd, stdIn }: { cmd: string; stdIn?: string }): Promise<CommandResult> {
@@ -330,7 +343,8 @@ export class NodeOpenSSL {
       ca: outputFile,
       config,
       files: {},
-      signCSR: async ({ csrFile, outputFile }: Partial<SignCSRParams>): Promise<SignedCertResult> => this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile, configFile } as SignCSRParams),
+      signCSR: async ({ csrFile, outputFile }: Partial<SignCSRParams>): Promise<SignedCertResult> =>
+        this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile, configFile } as SignCSRParams),
     };
   }
 
