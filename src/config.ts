@@ -20,9 +20,7 @@ function generateLine(key: string, value: string | number) {
   if (!value) {
     return '';
   }
-  const keyStringLength = 23;
-  const paddingLength = keyStringLength - key.length;
-  return `${key.padEnd(paddingLength)} = ${value}\n`;
+  return `${key.padEnd(23)} = ${value}\n`;
 }
 
 function generateBlock(blockTitle: string, blockData: ConfigBlockData | undefined) {
