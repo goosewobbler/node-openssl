@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { cwd } from 'process';
-import tmp from 'tmp-promise';
+import * as tmp from 'tmp-promise';
 import { writeFile } from 'fs/promises';
 import { generateConfig } from './config';
 
@@ -267,7 +267,7 @@ export class NodeOpenSSL {
     let configFilePath;
     let config;
     try {
-      const tmpFile = await tmp.file({ mode: '0644', prefix: 'csr-', postfix: '.cnf' });
+      const tmpFile = await tmp.file({ mode: 0o644, prefix: 'csr-', postfix: '.cnf' });
       configFilePath = tmpFile.path;
       config = generateConfig({
         messageDigest,
@@ -306,7 +306,7 @@ export class NodeOpenSSL {
     let configFile: string;
     let config: string;
     try {
-      const tmpFile = await tmp.file({ mode: '0644', prefix: 'ca-', postfix: '.cnf' });
+      const tmpFile = await tmp.file({ mode: 0o644, prefix: 'ca-', postfix: '.cnf' });
       configFile = tmpFile.path;
       config = generateConfig({
         messageDigest: 'sha512',
