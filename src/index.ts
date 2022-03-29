@@ -3,82 +3,18 @@ import { cwd } from 'process';
 import * as tmp from 'tmp-promise';
 import { writeFile } from 'fs/promises';
 import { generateConfig } from './config';
-
-type PrivateKeyResult = {
-  key: string;
-  cmd: string;
-};
-
-type GeneratePrivateKeyParams = {
-  format?: string;
-  algorithm?: string;
-  encrypted?: boolean;
-  encryptOpts?: {
-    password: string;
-    cipher: string;
-  };
-  paramFile?: string;
-  pkeyOpts?: { [Key: string]: string | number };
-};
-
-type GenerateCSRParams = {
-  keyFile: string;
-  newKey?: string;
-  messageDigest?: string;
-  outputFile?: string;
-  distinguishedName?: {
-    [key: string]: string;
-  };
-  altNames?: {
-    [key: string]: string;
-  };
-};
-
-type GenerateRootCAParams = {
-  outputFile: string;
-  keyFile: string;
-  distinguishedName?: {
-    [key: string]: string;
-  };
-  expiryDays?: number;
-};
-
-type SignCSRParams = {
-  outputFile?: string;
-  csrFile: string;
-  caCrtFile: string;
-  caKeyFile: string;
-  configFile: string;
-  expiryDays?: number;
-};
-
-interface Output {
-  cmd: string;
-  config: string;
-  files: {
-    [key: string]: string;
-  };
-}
-
-interface CSRResult extends Output {
-  csr: string;
-}
-
-interface CAResult extends Output {
-  ca: string;
-  signCSR: ({ csrFile, outputFile }: Partial<SignCSRParams>) => Promise<SignedCertResult>;
-}
-
-interface SignedCertResult extends Output {
-  crt: string;
-}
-
-type CommandResult = {
-  command: string;
-  stdOut: string;
-  stdErr: string;
-  exitCode: number;
-};
+import {
+  CAResult,
+  CommandResult,
+  CSRResult,
+  GenerateCSRParams,
+  GeneratePrivateKeyParams,
+  GenerateRootCAParams,
+  Output,
+  PrivateKeyResult,
+  SignCSRParams,
+  SignedCertResult,
+} from './types';
 
 // TODO: verify usage / requirement and clean up or remove
 function normalizeCommand(command: string) {
