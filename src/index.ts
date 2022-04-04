@@ -197,7 +197,7 @@ export class NodeOpenSSL {
       outputFile = 'csr.pem',
       distinguishedName,
       altNames,
-    }: GenerateCSRParams = { keyFile: `${cwd}/csr.key` },
+    }: GenerateCSRParams = { keyFile: `${cwd()}/csr.key` },
   ): Promise<CSRResult> {
     const cmdBits = [`req -new -noenc -out ${outputFile}`];
 
@@ -242,7 +242,7 @@ export class NodeOpenSSL {
     distinguishedName,
     outputFile,
     keyFile,
-    expiryDays,
+    expiryDays = 365,
   }: GenerateRootCAParams): Promise<CAResult> {
     const cmdBits = [`req -x509 -new -noenc -out ${outputFile} -keyout ${keyFile} -days ${expiryDays}`];
     // openssl req -config cnf/ca.cnf -x509 -new -days 1095 -out ca/rootCA-crt.pem
@@ -279,8 +279,8 @@ export class NodeOpenSSL {
       ca: outputFile,
       config,
       files: {},
-      signCSR: async ({ csrFile, outputFile }: Partial<SignCSRParams>): Promise<SignedCertResult> =>
-        this.signCSR({ csrFile, caCrtFile, caKeyFile: keyFile, outputFile, configFile } as SignCSRParams),
+      signCSR: async (params: Partial<SignCSRParams>): Promise<SignedCertResult> =>
+        this.signCSR({ ...params, caCrtFile, caKeyFile: keyFile, configFile } as SignCSRParams),
     };
   }
 
