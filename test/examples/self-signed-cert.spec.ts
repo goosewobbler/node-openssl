@@ -44,4 +44,13 @@ it('should generate a valid certificate', async () => {
   // key: test-csr.key
   // ca: test-ca.pem
   // crt: test-crt.pem
+
+  // verify csr
+  // openssl req -in csr/{acme.domain}-csr.pem -noout -text
+
+  // verify ca?
+  // openssl verify -CAfile ca.crt /etc/letsencrypt/live/example.com/cert.pem
+
+  // verify crt
+  // openssl x509 -in {acme.domain}-crt.pem -text -noout
 });
