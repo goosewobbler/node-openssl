@@ -4,11 +4,12 @@ type ConfigBlockData = {
 
 type ConfigParams = {
   messageDigest: string;
-  reqExtensionBlockName: string;
+  extensionsType: string;
+  extensionsBlockName: string;
   distinguishedName?: {
     [key: string]: string;
   };
-  reqExtensions?: {
+  extensionsBlockData?: {
     [key: string]: string;
   };
   altNames?: {
@@ -36,28 +37,29 @@ function generateBlock(blockTitle: string, blockData: ConfigBlockData | undefine
 export const generateConfig = ({
   messageDigest,
   distinguishedName,
-  reqExtensionBlockName,
-  reqExtensions,
+  extensionsType,
+  extensionsBlockName,
+  extensionsBlockData,
   altNames,
 }: ConfigParams) => {
   const generateBlockReference = (key: string, blockName: string, blockData: ConfigBlockData | undefined) =>
     blockData ? { [key]: `${blockName}` } : {};
   return `
-    ${generateBlock('req', {
-      prompt: 'no',
-      default_bits: 4096, // configurable, default 4096 (cmd override -newkey rsa:4096, default 2048)
-      default_md: messageDigest, // configurable, default sha512, validate digest supported by dgst (cmd override -digest, default sha256)
-      // default_keyfile: '{acme.domain}-key.pem', // configurable, ignored if not specified (cmd override -keyout)
-      string_mask: 'utf8only',
-      utf8: 'yes',
-      ...generateBlockReference('distinguished_name', 'req_distinguished_name', distinguishedName),
-      ...generateBlockReference('req_extensions', reqExtensionBlockName, reqExtensions),
-    })}
-    ${generateBlock('req_distinguished_name', distinguishedName)}
-    ${generateBlock(reqExtensionBlockName, {
-      ...reqExtensions,
-      ...generateBlockReference('subjectAltName', reqExtensionBlockName, altNames),
-    })}
-    ${generateBlock('alt_names', altNames)}
-  `;
+${generateBlock('req', {
+  prompt: 'no',
+  default_bits: 4096, // configurable, default 4096 (cmd override -newkey rsa:4096, default 2048)
+  default_md: messageDigest, // configurable, default sha512, validate digest supported by dgst (cmd override -digest, default sha256)
+  // default_keyfile: '{acme.domain}-key.pem', // configurable, ignored if not specified (cmd override -keyout)
+  string_mask: 'utf8only',
+  utf8: 'yes',
+  ...generateBlockReference('distinguished_name', 'req_distinguished_name', distinguishedName),
+  ...generateBlockReference(`${extensionsType}_extensions`, extensionsBlockName, extensionsBlockData),
+})}
+${generateBlock('req_distinguished_name', distinguishedName)}
+${generateBlock(extensionsBlockName, {
+  ...extensionsBlockData,
+  ...generateBlockReference('subjectAltName', '@alt_names', altNames),
+})}
+${generateBlock('alt_names', altNames)}
+`;
 };

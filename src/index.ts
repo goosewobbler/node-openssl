@@ -16,24 +16,6 @@ import {
   SignedCertResult,
 } from './types';
 
-// TODO: verify usage / requirement and clean up or remove
-function normalizeCommand(command: string) {
-  const cmd = command.split(' ');
-  const outcmd = [];
-  const cmdbuffer = [];
-  for (let i = 0; i <= cmd.length - 1; i++) {
-    if (cmd[i].charAt(cmd[i].length - 1) === '\\') {
-      cmdbuffer.push(cmd[i]);
-    } else if (cmdbuffer.length > 0) {
-      outcmd.push(`${cmdbuffer.join(' ')} ${cmd[i]}`);
-      cmdbuffer.length = 0;
-    } else {
-      outcmd.push(cmd[i]);
-    }
-  }
-  return outcmd;
-}
-
 export class NodeOpenSSL {
   private openSSLPath;
 
@@ -57,23 +39,26 @@ export class NodeOpenSSL {
     };
 
     if (!this.openSSLVersionInfo) {
-      const { stdOut } = await this.runCommand({ cmd: 'version -a' });
+      const { stdOut } = await this.runCommand('version', ['-a']);
       this.openSSLVersionInfo = stdOut;
     }
 
     return Promise.resolve(parseVersionInfo());
   }
 
-  private async runCommand({ cmd, stdIn }: { cmd: string; stdIn?: string }): Promise<CommandResult> {
+  private async runCommand(command: string, rawParams: string[] | string[][], stdIn?: string): Promise<CommandResult> {
     const stdOutBuffer: Uint8Array[] = [];
     const stdErrBuffer: Uint8Array[] = [];
+    const params = rawParams.flat();
     let exitCode: number;
     let exited = false;
+
+    console.log('running command', command, params);
 
     return new Promise((resolve, reject) => {
       const handleExit = () => {
         const out = {
-          command: `${this.openSSLPath} ${cmd}`,
+          command: `${this.openSSLPath} ${command} ${params.join(' ')}`,
           stdOut: Buffer.concat(stdOutBuffer).toString(),
           stdErr: Buffer.concat(stdErrBuffer).toString(),
           exitCode,
@@ -87,14 +72,14 @@ export class NodeOpenSSL {
       };
 
       try {
-        const openssl = spawn(this.openSSLPath, normalizeCommand(cmd));
+        const openssl = spawn(this.openSSLPath, [command, ...params]);
 
         if (stdIn) {
           openssl.stdin.write(stdIn);
           openssl.stdin.end();
         }
 
-        openssl.stdout.on('data', (data) => {
+        openssl.stdout.on('data', (data: Uint8Array) => {
           stdOutBuffer.push(data);
           if (exited && exitCode === 0) {
             handleExit();
@@ -106,17 +91,17 @@ export class NodeOpenSSL {
           return reject(err);
         });
 
-        openssl.stderr.on('data', (data) => {
+        openssl.stderr.on('data', (data: Uint8Array) => {
           stdErrBuffer.push(data);
           if (exited && exitCode !== 0) {
             handleExit();
           }
         });
 
-        openssl.on('exit', (code) => {
+        openssl.on('exit', (code: number) => {
           exited = true;
-          exitCode = code as number;
-          const stdOutReceived = stdOutBuffer.length > 0 || cmd.includes(' -out ');
+          exitCode = code;
+          const stdOutReceived = stdOutBuffer.length > 0 || params.includes('-out');
           const stdErrReceived = stdErrBuffer.length > 0;
           if ((stdOutReceived && exitCode === 0) || (stdErrReceived && exitCode !== 0)) {
             handleExit();
@@ -129,7 +114,8 @@ export class NodeOpenSSL {
   }
 
   public async getSupportedCiphers(): Promise<string[]> {
-    const result = await this.runCommand({ cmd: 'enc -list' });
+    console.log('getting supported ciphers');
+    const result = await this.runCommand('enc', ['-list']);
     const ciphers = result.stdOut.match(
       /-[a-zA-Z0-9]{2,11}(-[a-zA-Z0-9]{2,11})?(-[a-zA-Z0-9]{2,11})?(-[a-zA-Z0-9]{2,11})?/g,
     );
@@ -149,20 +135,20 @@ export class NodeOpenSSL {
   }: GeneratePrivateKeyParams = {}): Promise<PrivateKeyResult> {
     const validAlgorithms = ['RSA', 'RSA-PSS', 'EC', 'X25519', 'X448', 'ED25519', 'ED448'];
 
-    const cmdBits = ['genpkey -outform PEM'];
+    const params = ['-outform', 'PEM'];
     let stdIn;
 
     if (paramFile) {
-      cmdBits.push(`-paramfile ${paramFile}`);
+      params.push('-paramFile', paramFile);
     } else {
       // algorithm is mutually exclusive with paramfile
       if (!validAlgorithms.includes(algorithm)) {
         throw new Error(`Invalid algorithm: ${algorithm}`);
       }
-      cmdBits.push(`-algorithm ${algorithm}`);
+      params.push('-algorithm', algorithm);
 
       Object.keys(pkeyOpts).forEach((key) => {
-        cmdBits.push(`-pkeyopt ${key}:${pkeyOpts[key]}`);
+        params.push('-pkeyopt', `${key}:${pkeyOpts[key]}`);
       });
     }
 
@@ -172,7 +158,7 @@ export class NodeOpenSSL {
       const { cipher, password } = encryptOpts;
       let passphrase = 'stdin';
 
-      if (!validCiphers.includes(cipher)) {
+      if (!validCiphers.includes(`-${cipher}`)) {
         throw new Error(`Invalid cipher: ${cipher}`);
       }
 
@@ -181,10 +167,10 @@ export class NodeOpenSSL {
       } else {
         stdIn = password;
       }
-      cmdBits.push(`-pass ${passphrase} -${cipher}`);
+      params.push('-pass', `"${passphrase}"`, `-${cipher}`);
     }
 
-    const { command: cmd, stdOut: key } = await this.runCommand({ cmd: cmdBits.join(' '), stdIn });
+    const { command: cmd, stdOut: key } = await this.runCommand('genpkey', params, stdIn);
 
     return { key, cmd };
   }
@@ -192,21 +178,33 @@ export class NodeOpenSSL {
   public async generateCSR(
     {
       keyFile,
+      keyPassword,
       newKey = 'rsa:4096',
       messageDigest = 'sha512',
       outputFile = 'csr.pem',
+      outputKeyFile,
       distinguishedName,
       altNames,
     }: GenerateCSRParams = { keyFile: `${cwd()}/csr.key` },
   ): Promise<CSRResult> {
-    const cmdBits = [`req -new -noenc -out ${outputFile}`];
+    const params = [
+      ['-new', '-noenc'],
+      ['-out', `${outputFile}`],
+    ];
 
-    if (newKey) {
+    if (outputKeyFile) {
       // create new private key, output to keyFile
-      cmdBits.push(`-newkey ${newKey} -keyout ${keyFile}`);
+      params.push(['-newkey', newKey], ['-keyout', outputKeyFile]);
+
+      // TODO: passout for creating encrypted key
     } else {
+      // TODO: verify keyFile exists / is readable?
       // use existing private key
-      cmdBits.push(`-key ${keyFile}`);
+      params.push(['-key', keyFile]);
+
+      if (keyPassword) {
+        params.push(['-passin', keyPassword]);
+      }
     }
 
     const reqExtensions = {
@@ -222,18 +220,19 @@ export class NodeOpenSSL {
       config = generateConfig({
         messageDigest,
         distinguishedName,
-        reqExtensionBlockName: 'v3_req',
-        reqExtensions,
+        extensionsType: 'req',
+        extensionsBlockName: 'v3_req',
+        extensionsBlockData: reqExtensions,
         altNames,
       });
       await writeFile(configFilePath, config);
     } catch (e) {
-      throw new Error(`Error writing config file: ${e}`);
+      throw new Error(`Error writing config file: ${e as string}`);
     }
 
-    cmdBits.push(`-config ${configFilePath}`);
+    params.push(['-config', `${configFilePath}`]);
 
-    const { command: cmd, stdOut: csr } = await this.runCommand({ cmd: cmdBits.join(' ') });
+    const { command: cmd, stdOut: csr } = await this.runCommand('req', params);
 
     return { csr, cmd, config, files: { key: keyFile, csr: outputFile } };
   }
@@ -244,7 +243,12 @@ export class NodeOpenSSL {
     keyFile,
     expiryDays = 365,
   }: GenerateRootCAParams): Promise<CAResult> {
-    const cmdBits = [`req -x509 -new -noenc -out ${outputFile} -keyout ${keyFile} -days ${expiryDays}`];
+    const params = [
+      ['-x509', '-new', '-noenc'],
+      ['-out', outputFile],
+      ['-keyout', keyFile],
+      ['-days', expiryDays.toString()],
+    ];
     // openssl req -config cnf/ca.cnf -x509 -new -days 1095 -out ca/rootCA-crt.pem
 
     const reqExtensions = {
@@ -261,17 +265,18 @@ export class NodeOpenSSL {
       config = generateConfig({
         messageDigest: 'sha512',
         distinguishedName,
-        reqExtensionBlockName: 'v3_ca',
-        reqExtensions,
+        extensionsType: 'x509',
+        extensionsBlockName: 'v3_ca',
+        extensionsBlockData: reqExtensions,
       });
       await writeFile(configFile, config);
     } catch (e) {
-      throw new Error(`Error writing config file: ${e}`);
+      throw new Error(`Error writing config file: ${e as string}`);
     }
 
-    cmdBits.push(`-config ${configFile}`);
+    params.push(['-config', configFile]);
 
-    const { command: cmd } = await this.runCommand({ cmd: cmdBits.join(' ') });
+    const { command: cmd } = await this.runCommand('req', params);
     const caCrtFile = outputFile;
 
     return {
@@ -293,8 +298,13 @@ export class NodeOpenSSL {
     configFile,
   }: SignCSRParams): Promise<SignedCertResult> {
     // openssl req -in csr/{acme.domain}-csr.pem -out {acme.domain}-crt.pem -CA ca/rootCA-crt.pem -CAkey ca/rootCA-key.pem -days 365 -copy_extensions copy
-    const cmdBits = [
-      `req -in ${csrFile} -days ${expiryDays} -CA ${caCrtFile} -CAkey ${caKeyFile} -config ${configFile} -copy_extensions copy`,
+    const params = [
+      ['-in', csrFile],
+      ['-days', expiryDays.toString()],
+      ['-CA', caCrtFile],
+      ['-CAkey', caKeyFile],
+      ['-config', configFile],
+      ['-copy_extensions', 'copy'],
     ];
 
     const files = {
@@ -304,11 +314,11 @@ export class NodeOpenSSL {
     } as Output['files'];
 
     if (outputFile) {
-      cmdBits.push(`-out ${outputFile}`);
+      params.push(['-out', outputFile]);
       files.crt = outputFile;
     }
 
-    const { command: cmd, stdOut: crt } = await this.runCommand({ cmd: cmdBits.join(' ') });
+    const { command: cmd, stdOut: crt } = await this.runCommand('req', params);
 
     return {
       cmd,

@@ -17,9 +17,11 @@ export type GeneratePrivateKeyParams = {
 
 export type GenerateCSRParams = {
   keyFile: string;
+  keyPassword?: string;
   newKey?: string;
   messageDigest?: string;
   outputFile?: string;
+  outputKeyFile?: string;
   distinguishedName?: {
     [key: string]: string;
   };
